@@ -224,32 +224,24 @@ const changePassword = async (req, res) => {
 };
 
 /**
- * Upgrade to landlord account
+ * Get user's landlord verification status
  */
-const upgradeLandlord = async (req, res) => {
+const getLandlordStatus = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
-
-    if (user.role === 'landlord') {
-      return res.status(400).json({
-        success: false,
-        message: 'User is already a landlord'
-      });
-    }
-
-    await user.update({ role: 'landlord' });
-
+    const user = req.user;
+    
     res.json({
       success: true,
-      message: 'Account upgraded to landlord successfully. Please upload verification documents.',
       data: {
-        user
+        isLandlord: user.role === 'landlord',
+        isVerified: user.isLandlordVerified,
+        canRequestVerification: user.role !== 'landlord' || !user.isLandlordVerified
       }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Failed to upgrade account',
+      message: 'Failed to get landlord status',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -261,5 +253,5 @@ module.exports = {
   getProfile,
   updateProfile,
   changePassword,
-  upgradeLandlord
+  getLandlordStatus
 };

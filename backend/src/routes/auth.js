@@ -7,7 +7,7 @@ const {
   getProfile,
   updateProfile,
   changePassword,
-  upgradeLandlord
+  getLandlordStatus
 } = require('../controllers/authController');
 
 const {
@@ -26,6 +26,6 @@ router.post('/login', validateLogin, login);
 router.get('/profile', authenticate, getProfile);
 router.put('/profile', authenticate, updateProfile);
 router.put('/change-password', authenticate, validatePasswordUpdate, changePassword);
-router.post('/upgrade-landlord', authenticate, upgradeLandlord);
+router.get('/landlord-status', authenticate, getLandlordStatus);
 
 module.exports = router;

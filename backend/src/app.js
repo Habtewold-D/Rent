@@ -5,6 +5,12 @@ require('dotenv').config();
 
 const sequelize = require('./config/database');
 const authRoutes = require('./routes/auth');
+const landlordRoutes = require('./routes/landlord');
+const adminRoutes = require('./routes/admin');
+const createAdminUser = require('./utils/createAdmin');
+
+// Import models to establish associations
+require('./models/index');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +25,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/landlord', landlordRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -57,6 +65,9 @@ const startServer = async () => {
     // Sync database models
     await sequelize.sync({ alter: true });
     console.log('✅ Database models synchronized.');
+    
+    // Create admin user if not exists
+    await createAdminUser();
     
     // Start server
     app.listen(PORT, () => {
