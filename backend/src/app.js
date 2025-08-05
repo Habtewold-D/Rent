@@ -7,6 +7,7 @@ const sequelize = require('./config/database');
 const authRoutes = require('./routes/auth');
 const landlordRoutes = require('./routes/landlord');
 const adminRoutes = require('./routes/admin');
+const roomRoutes = require('./routes/rooms');
 const createAdminUser = require('./utils/createAdmin');
 
 // Import models to establish associations
@@ -27,6 +28,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/landlord', landlordRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/rooms', roomRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -62,8 +64,14 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
     
-    // Sync database models
-    await sequelize.sync({ alter: true });
+    // Sync database models in correct order (User first, then dependent models)
+    const { User, LandlordRequest, Room, RoomImage } = require('./models');
+    
+    await User.sync({ force: false });
+    await LandlordRequest.sync({ force: false });
+    await Room.sync({ force: true }); // Force recreate Room table to fix index issues
+    await RoomImage.sync({ force: true }); // Force recreate RoomImage table
+    
     console.log('✅ Database models synchronized.');
     
     // Create admin user if not exists
