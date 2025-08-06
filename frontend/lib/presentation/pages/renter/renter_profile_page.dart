@@ -130,6 +130,28 @@ class _RenterProfilePageState extends State<RenterProfilePage> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (canRequestVerification)
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: vm.loading
+                        ? null
+                        : () async {
+                            final res = await Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const LandlordVerificationPage()),
+                            );
+                            if (!mounted) return;
+                            if (res == true && token != null) {
+                              await vm.loadAll(token);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Verification request submitted')),
+                              );
+                            }
+                          },
+                    icon: const Icon(Icons.verified_outlined),
+                    label: const Text('Become Landlord'),
+                  ),
+                ),
+              if (canRequestVerification) const SizedBox(height: 16),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
