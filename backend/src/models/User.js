@@ -66,7 +66,7 @@ const User = sequelize.define('User', {
     allowNull: true
   },
   religion: {
-    type: DataTypes.ENUM('orthodox', 'muslim', 'protestant', 'catholic', 'other', 'prefer_not_to_say'),
+    type: DataTypes.ENUM('orthodox', 'muslim', 'protestant', 'catholic', 'other_christian'),
     allowNull: true
   },
   isVerified: {

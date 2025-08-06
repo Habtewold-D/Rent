@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const landlordRoutes = require('./routes/landlord');
 const adminRoutes = require('./routes/admin');
 const roomRoutes = require('./routes/rooms');
+const matchingRoutes = require('./routes/matching');
 const createAdminUser = require('./utils/createAdmin');
 
 // Import models to establish associations
@@ -29,6 +30,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/landlord', landlordRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/matching', matchingRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -65,12 +67,17 @@ const startServer = async () => {
     console.log('✅ Database connection established successfully.');
     
     // Sync database models in correct order (User first, then dependent models)
-    const { User, LandlordRequest, Room, RoomImage } = require('./models');
-    
-    await User.sync({ force: false });
-    await LandlordRequest.sync({ force: false });
-    await Room.sync({ force: true }); // Force recreate Room table to fix index issues
-    await RoomImage.sync({ force: true }); // Force recreate RoomImage table
+    const { User, LandlordRequest, Room, RoomImage, MatchGroup, GroupMember, Notification } = require('./models');
+
+    // Use non-destructive sync. `alter: true` updates schema without dropping tables.
+    const syncOptions = { alter: true };
+    await User.sync(syncOptions);
+    await LandlordRequest.sync(syncOptions);
+    await Room.sync(syncOptions);
+    await RoomImage.sync(syncOptions);
+    await MatchGroup.sync(syncOptions);
+    await GroupMember.sync(syncOptions);
+    await Notification.sync(syncOptions);
     
     console.log('✅ Database models synchronized.');
     
