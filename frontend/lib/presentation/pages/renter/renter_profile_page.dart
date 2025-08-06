@@ -123,20 +123,13 @@ class _RenterProfilePageState extends State<RenterProfilePage> {
                         if (isVerified)
                           _Chip(label: 'Verified landlord', color: Colors.green.shade100, icon: Icons.verified)
                         else if (isLandlord)
-                          _Chip(label: 'Landlord (not verified)', color: Colors.orange.shade100, icon: Icons.schedule)
-                        else
-                          _Chip(label: 'Renter', color: Colors.teal.shade100),
+                          _Chip(label: 'Landlord (not verified)', color: Colors.orange.shade100, icon: Icons.schedule),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              if (vm.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(vm.error!, style: const TextStyle(color: Colors.red)),
-                ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

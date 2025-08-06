@@ -120,11 +120,6 @@ class _LandlordProfilePageState extends State<LandlordProfilePage> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (vm.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(vm.error!, style: const TextStyle(color: Colors.red)),
-                ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

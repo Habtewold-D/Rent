@@ -88,10 +88,7 @@ class ProfileService {
   }
 
   String _extractErrorMessage(http.Response res, Map<String, dynamic> body, {required String fallback}) {
-    final candidates = <String?>[
-      body['message']?.toString(),
-      body['error']?.toString(),
-    ];
+    // Prefer detailed validator messages if present
     final errorsArr = body['errors'];
     if (errorsArr is List && errorsArr.isNotEmpty) {
       final msgs = <String>[];
@@ -102,20 +99,26 @@ class ProfileService {
           msgs.add(item.toString());
         }
       }
-      if (msgs.isNotEmpty) candidates.add(msgs.join('\n'));
+      if (msgs.isNotEmpty) {
+        return msgs.join('\n');
+      }
     }
     if (errorsArr is Map) {
       for (final v in errorsArr.values) {
         if (v is List && v.isNotEmpty) {
-          candidates.add(v.first.toString());
-          break;
+          return v.first.toString();
         } else if (v != null) {
-          candidates.add(v.toString());
-          break;
+          return v.toString();
         }
       }
     }
-    candidates.add(res.reasonPhrase);
+
+    // Fallback to message/error/reason
+    final candidates = <String?>[
+      body['error']?.toString(),
+      body['message']?.toString(),
+      res.reasonPhrase,
+    ];
     return candidates.firstWhere((e) => e != null && e.trim().isNotEmpty, orElse: () => fallback)!;
   }
 }
