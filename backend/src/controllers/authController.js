@@ -165,12 +165,20 @@ const updateProfile = async (req, res) => {
       }
     }
 
+    // Coerce age to integer if provided
+    let parsedAge;
+    if (typeof age !== 'undefined' && age !== null && age !== '') {
+      const n = parseInt(age, 10);
+      parsedAge = Number.isNaN(n) ? user.age : n;
+    }
+
     await user.update({
       firstName: firstName || user.firstName,
       lastName: lastName || user.lastName,
       phone: phone || user.phone,
       profession: profession || user.profession,
-      religion: religion || user.religion
+      religion: religion || user.religion,
+      age: typeof parsedAge === 'number' ? parsedAge : user.age,
     });
 
     res.json({

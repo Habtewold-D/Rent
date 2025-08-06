@@ -18,6 +18,11 @@ class _RegisterPageState extends State<RegisterPage> {
   final _lastCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  String? _gender; // user must choose male/female
+  bool _obscurePass = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
@@ -25,6 +30,8 @@ class _RegisterPageState extends State<RegisterPage> {
     _lastCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
 
@@ -89,10 +96,61 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
+                              controller: _phoneCtrl,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                labelText: 'Phone',
+                                hintText: '+2519XXXXXXXX or 09XXXXXXXX',
+                                prefixIcon: Icon(Icons.phone_outlined),
+                              ),
+                              validator: (v) {
+                                final raw = (v ?? '').trim();
+                                final s = raw.replaceAll(RegExp(r'[\s-]'), '');
+                                final re = RegExp(r'^(?:\+251|0)[79]\d{8}$');
+                                return s.isEmpty
+                                    ? 'Phone required'
+                                    : (!re.hasMatch(s) ? 'Use Ethiopian format: +2519XXXXXXXX or 09XXXXXXXX' : null);
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              value: _gender,
+                              decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc_outlined)),
+                              hint: const Text('Select gender'),
+                              items: const [
+                                DropdownMenuItem(value: 'male', child: Text('Male')),
+                                DropdownMenuItem(value: 'female', child: Text('Female')),
+                              ],
+                              onChanged: (v) => setState(() => _gender = v),
+                              validator: (v) => v == null || v.isEmpty ? 'Please select gender' : null,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
                               controller: _passwordCtrl,
-                              decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+                              decoration: InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                                  icon: Icon(_obscurePass ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                                ),
+                              ),
                               validator: Validators.password,
-                              obscureText: true,
+                              obscureText: _obscurePass,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _confirmCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Confirm password',
+                                prefixIcon: const Icon(Icons.lock_person_outlined),
+                                suffixIcon: IconButton(
+                                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                                  icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                                ),
+                              ),
+                              validator: (v) => v != _passwordCtrl.text ? 'Passwords do not match' : null,
+                              obscureText: _obscureConfirm,
                             ),
                             const SizedBox(height: 20),
                             SizedBox(
@@ -105,8 +163,6 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            if (auth.error != null)
-                              Text(auth.error!, style: const TextStyle(color: Colors.redAccent)),
                             const SizedBox(height: 12),
                             TextButton(
                               onPressed: () => Navigator.push(
@@ -137,8 +193,9 @@ class _RegisterPageState extends State<RegisterPage> {
       lastName: _lastCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       password: _passwordCtrl.text,
-      phone: '+251911111111',
-      gender: 'male',
+      confirmPassword: _confirmCtrl.text,
+      phone: _phoneCtrl.text.trim(),
+      gender: _gender!,
     );
     if (ok) {
       if (!mounted) return;

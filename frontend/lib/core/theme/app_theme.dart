@@ -13,6 +13,19 @@ class AppTheme {
         primary: AppColors.darkCyan,
       ),
       scaffoldBackgroundColor: AppColors.darkBg,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.darkCyan,
+        foregroundColor: Colors.white,
+        elevation: 1,
+        centerTitle: true,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppColors.darkSurface,
+        selectedItemColor: AppColors.darkCyan,
+        unselectedItemColor: Colors.white70,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+      ),
       inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: AppColors.darkSurface,
@@ -41,6 +54,19 @@ class AppTheme {
         primary: AppColors.darkCyan,
       ),
       scaffoldBackgroundColor: AppColors.lightBg,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.darkCyan,
+        foregroundColor: Colors.white,
+        elevation: 1,
+        centerTitle: true,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppColors.lightSurface,
+        selectedItemColor: AppColors.darkCyan,
+        unselectedItemColor: Colors.black54,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+      ),
       inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: AppColors.lightSurface,

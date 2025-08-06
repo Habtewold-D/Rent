@@ -8,7 +8,6 @@ import 'data/repositories/auth_repository_impl.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint('Bootstrapping app...');
   runApp(const RentApp());
 }
 

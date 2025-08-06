@@ -45,8 +45,6 @@ class AuthService {
       'gender': gender, // expects 'male' or 'female'
       'Gender': gender,
     };
-    print('[AuthService.register] POST ${ApiConstants.baseUrl}${ApiConstants.register}');
-    print('[AuthService.register] payload: ' + jsonEncode(payload));
     final res = await _client.post(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.register}'),
       headers: {
@@ -56,8 +54,6 @@ class AuthService {
       // Send both camelCase and snake_case to maximize compatibility with different backends.
       body: jsonEncode(payload),
     );
-    print('[AuthService.register] status: ${res.statusCode}');
-    print('[AuthService.register] response: ${res.body}');
     final body = _safeJson(res.body);
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
     throw Exception(_extractErrorMessage(res, body, fallback: 'Registration failed'));

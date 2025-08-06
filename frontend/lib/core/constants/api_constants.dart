@@ -7,6 +7,13 @@ class ApiConstants {
   // Auth endpoints
   static const String login = '/api/auth/login';
   static const String register = '/api/auth/register';
+  static const String profile = '/api/auth/profile';
+  static const String changePassword = '/api/auth/change-password';
+  static const String landlordStatus = '/api/auth/landlord-status';
+
+  // Landlord endpoints
+  static const String landlordRequestVerification = '/api/landlord/request-verification';
+  static const String landlordMyRequest = '/api/landlord/my-request';
 
   // Matching endpoints (future use)
   static const String joinRoom = '/api/matching/join-room'; // + '/:roomId'
