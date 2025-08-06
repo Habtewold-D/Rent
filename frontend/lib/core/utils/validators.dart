@@ -19,8 +19,8 @@ class Validators {
   static String? ethiopianPhone(String? v) {
     if (v == null || v.trim().isEmpty) return 'Phone is required';
     final s = v.trim();
-    final ok = RegExp(r'^(?:\+251|0)9\d{8}$').hasMatch(s);
-    // Primary pattern for mobiles is 09XXXXXXXX or +2519XXXXXXXX
-    return ok ? null : 'Please provide a valid Ethiopian phone number start with +251...';
+    final ok = RegExp(r'^(?:\+251|0)[79]\d{8}$').hasMatch(s);
+    // Backend allows 07XXXXXXXX or 09XXXXXXXX (and +2517 / +2519)
+    return ok ? null : 'Please provide a valid Ethiopian phone number';
   }
 }

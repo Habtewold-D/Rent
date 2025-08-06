@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'presentation/pages/login_page.dart';
-import 'presentation/pages/register_page.dart';
+import 'presentation/pages/auth/login_page.dart';
+import 'presentation/pages/auth/register_page.dart';
 import 'core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'presentation/viewmodels/auth_view_model.dart';

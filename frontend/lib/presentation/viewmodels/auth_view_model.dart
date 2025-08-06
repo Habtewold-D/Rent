@@ -8,16 +8,28 @@ class AuthViewModel extends ChangeNotifier {
   bool _loading = false;
   String? _error;
   String? _token;
+  String? _role;
+  String? _userName;
+  String? _userEmail;
 
   bool get loading => _loading;
   String? get error => _error;
   String? get token => _token;
+  String? get role => _role;
+  String? get userName => _userName;
+  String? get userEmail => _userEmail;
 
   Future<bool> login(String email, String password) async {
     _setLoading(true);
     try {
       final res = await _repo.login(email, password);
-      _token = res['token'] as String?;
+      _token = res['data']?['token'] as String?;
+      final user = res['data']?['user'] as Map<String, dynamic>?;
+      _role = user?['role'] as String?;
+      final first = user?['firstName'] as String?;
+      final last = user?['lastName'] as String?;
+      _userName = [first, last].where((s) => (s ?? '').isNotEmpty).join(' ').trim();
+      _userEmail = user?['email'] as String?;
       _error = null;
       return true;
     } catch (e) {
@@ -48,7 +60,13 @@ class AuthViewModel extends ChangeNotifier {
         phone: phone,
         gender: gender,
       );
-      _token = res['token'] as String?; // if backend returns token
+      _token = res['data']?['token'] as String?; // backend returns token under data.token
+      final user = res['data']?['user'] as Map<String, dynamic>?;
+      _role = user?['role'] as String?;
+      final first = user?['firstName'] as String?;
+      final last = user?['lastName'] as String?;
+      _userName = [first, last].where((s) => (s ?? '').isNotEmpty).join(' ').trim();
+      _userEmail = user?['email'] as String?;
       _error = null;
       return true;
     } catch (e) {
@@ -68,5 +86,15 @@ class AuthViewModel extends ChangeNotifier {
     final s = e.toString();
     if (s.startsWith('Exception: ')) return s.substring('Exception: '.length);
     return s;
+  }
+
+  // Clears all auth state
+  void logout() {
+    _token = null;
+    _role = null;
+    _userName = null;
+    _userEmail = null;
+    _error = null;
+    notifyListeners();
   }
 }
