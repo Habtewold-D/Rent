@@ -15,6 +15,11 @@ class ApiConstants {
   static const String landlordRequestVerification = '/api/landlord/request-verification';
   static const String landlordMyRequest = '/api/landlord/my-request';
 
+  // Admin endpoints
+  static const String adminLandlordRequests = '/api/admin/landlord-requests';
+  static const String adminReviewLandlordRequest = '/api/admin/landlord-requests'; // + '/:id/review'
+  static const String adminLandlordRequestStats = '/api/admin/landlord-requests/stats';
+
   // Matching endpoints (future use)
   static const String joinRoom = '/api/matching/join-room'; // + '/:roomId'
   static const String createGroup = '/api/matching/create-group'; // + '/:roomId'

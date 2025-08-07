@@ -13,9 +13,9 @@ const getLandlordRequests = async (req, res) => {
     const offset = (page - 1) * limit;
     const whereClause = {};
     
-    // Filter by status if provided
-    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
-      whereClause.status = status;
+    // Filter by status if provided (compare against enum values by normalizing input)
+    if (status && ['pending', 'approved', 'rejected'].includes(String(status).toLowerCase())) {
+      whereClause.status = String(status).toLowerCase();
     }
 
     // Search by user email or name if provided

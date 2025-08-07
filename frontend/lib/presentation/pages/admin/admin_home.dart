@@ -19,18 +19,18 @@ class _AdminHomeState extends State<AdminHome> {
   int _index = 0;
 
   final _pages = const [
-    AdminDashboardPage(), // 0
-    AdminUsersPage(),     // 1
-    AdminSettingsPage(),  // 2 bottom
-    AdminListingsReviewPage(), // 3 drawer
-    AdminReportsPage(),        // 4 drawer
+    AdminDashboardPage(),           // 0 bottom
+    AdminUsersPage(),               // 1 bottom
+    AdminListingsReviewPage(),      // 2 bottom (Reviews)
+    AdminSettingsPage(),            // 3 drawer
+    AdminReportsPage(),             // 4 drawer
   ];
 
   final _titles = const [
     'Dashboard',
     'Users',
-    'Settings',
     'Reviews',
+    'Settings',
     'Reports',
   ];
 
@@ -68,8 +68,8 @@ class _AdminHomeState extends State<AdminHome> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.fact_check_outlined),
-              title: const Text('Reviews'),
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Settings'),
               onTap: () {
                 Navigator.pop(context);
                 setState(() => _index = 3);
@@ -107,7 +107,7 @@ class _AdminHomeState extends State<AdminHome> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.group_outlined), label: 'Users'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+          BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Reviews'),
         ],
       ),
     );
