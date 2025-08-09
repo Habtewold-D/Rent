@@ -11,11 +11,15 @@ void main() {
   runApp(const RentApp());
 }
 
+// Global route observer for RouteAware pages (e.g., to auto-refresh on return)
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+
 class RentApp extends StatelessWidget {
   const RentApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final navKey = GlobalKey<NavigatorState>();
     return ChangeNotifierProvider(
       create: (_) => AuthViewModel(AuthRepositoryImpl()),
       child: MaterialApp(
@@ -24,8 +28,22 @@ class RentApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: ThemeMode.system,
-        // Render directly to rule out any initialRoute issues
-        home: const LoginPage(),
+        navigatorKey: navKey,
+        initialRoute: '/',
+        routes: {
+          '/': (context) => const LoginPage(),
+        },
+        onGenerateInitialRoutes: (String initialRouteName) {
+          // Guarantee at least one route on the stack
+          return [
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          ];
+        },
+        onGenerateRoute: (settings) {
+          // Fallback: if an unknown route or empty state occurs, go to LoginPage
+          return MaterialPageRoute(builder: (_) => const LoginPage());
+        },
+        navigatorObservers: [routeObserver],
       ),
     );
   }

@@ -2,51 +2,57 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import '../../../data/models/room.dart';
+import '../../../data/models/room_image.dart';
 import '../../../data/services/room_service.dart';
 import '../../viewmodels/auth_view_model.dart';
 
-class LandlordNewListingPage extends StatefulWidget {
-  const LandlordNewListingPage({super.key});
+class LandlordEditListingPage extends StatefulWidget {
+  final Room room;
+  const LandlordEditListingPage({super.key, required this.room});
 
   @override
-  State<LandlordNewListingPage> createState() => _LandlordNewListingPageState();
+  State<LandlordEditListingPage> createState() => _LandlordEditListingPageState();
 }
 
-class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
+class _LandlordEditListingPageState extends State<LandlordEditListingPage> {
   final _formKey = GlobalKey<FormState>();
-  final _rentCtrl = TextEditingController();
-  final _maxOccCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController();
-  final _amenitiesCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
+  late TextEditingController _rentCtrl;
+  late TextEditingController _maxOccCtrl;
+  late TextEditingController _addressCtrl;
+  late TextEditingController _cityCtrl;
+  late TextEditingController _amenitiesCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _emailCtrl;
 
-  String _roomType = RoomService.roomTypes.first;
-  String _gender = RoomService.genderPreferences.last; // 'mixed'
+  late String _roomType;
+  late String _gender;
   bool _submitting = false;
   final _service = RoomService();
 
-  List<UploadImage> _images = [];
-
-  String _labelize(String value) {
-    if (value.isEmpty) return value;
-    return value[0].toUpperCase() + value.substring(1);
-  }
+  // existing images from server
+  late List<RoomImage> _existingImages;
+  // new images to append
+  List<UploadImage> _newImages = [];
 
   @override
   void initState() {
     super.initState();
-    // Normalize defaults in case of state restoration from previous versions
-    if (!RoomService.roomTypes.contains(_roomType)) {
-      _roomType = RoomService.roomTypes.first;
-    }
-    if (!RoomService.genderPreferences.contains(_gender)) {
-      _gender = RoomService.genderPreferences.last;
-    }
+    final r = widget.room;
+    _rentCtrl = TextEditingController(text: r.monthlyRent.toStringAsFixed(2));
+    _maxOccCtrl = TextEditingController(text: r.maxOccupants.toString());
+    _addressCtrl = TextEditingController(text: r.address);
+    _cityCtrl = TextEditingController(text: r.city);
+    // Room model does not currently expose amenities/contact fields in frontend model
+    _amenitiesCtrl = TextEditingController(text: '');
+    _phoneCtrl = TextEditingController(text: '');
+    _emailCtrl = TextEditingController(text: '');
+    _roomType = RoomService.roomTypes.contains(r.roomType) ? r.roomType : RoomService.roomTypes.first;
+    _gender = RoomService.genderPreferences.contains(r.genderPreference) ? r.genderPreference : RoomService.genderPreferences.last;
+    _existingImages = List<RoomImage>.from(r.images);
   }
 
   @override
@@ -59,6 +65,11 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
+  }
+
+  String _labelize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 
   Future<void> _pickImages() async {
@@ -91,18 +102,11 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
       if (lower.endsWith('.webp')) return 'image/webp';
       if (lower.endsWith('.heic')) return 'image/heic';
       if (lower.endsWith('.heif')) return 'image/heif';
-      // Default to jpeg to satisfy multer image check
       return 'image/jpeg';
     }
 
     setState(() {
-      _images = files
-          .map((f) => UploadImage(
-                bytes: f.bytes as Uint8List,
-                filename: f.name,
-                contentType: _inferMime(f.name),
-              ))
-          .toList();
+      _newImages.addAll(files.map((f) => UploadImage(bytes: f.bytes as Uint8List, filename: f.name, contentType: _inferMime(f.name))));
     });
   }
 
@@ -116,19 +120,11 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
     setState(() => _submitting = true);
 
     try {
-      // Sanitize enums to avoid backend enum constraint errors
-      final safeRoomType = RoomService.roomTypes.contains(_roomType)
-          ? _roomType
-          : RoomService.roomTypes.first;
-      final safeGender = RoomService.genderPreferences.contains(_gender)
-          ? _gender
-          : RoomService.genderPreferences.last; // 'mixed'
+      final safeRoomType = RoomService.roomTypes.contains(_roomType) ? _roomType : RoomService.roomTypes.first;
+      final safeGender = RoomService.genderPreferences.contains(_gender) ? _gender : RoomService.genderPreferences.last;
 
-      // Clamp max occupants to backend constraints [1,10]
       final parsedMaxOcc = int.tryParse(_maxOccCtrl.text.trim()) ?? 1;
-      final clampedMaxOcc = parsedMaxOcc < 1
-          ? 1
-          : (parsedMaxOcc > 10 ? 10 : parsedMaxOcc);
+      final clampedMaxOcc = parsedMaxOcc < 1 ? 1 : (parsedMaxOcc > 10 ? 10 : parsedMaxOcc);
 
       final fields = <String, String>{
         'monthlyRent': _rentCtrl.text.trim(),
@@ -138,6 +134,7 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
         'address': _addressCtrl.text.trim(),
         'city': _cityCtrl.text.trim(),
       };
+
       final amenities = _amenitiesCtrl.text.trim();
       if (amenities.isNotEmpty) {
         final items = amenities.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -146,17 +143,13 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
       if (_phoneCtrl.text.trim().isNotEmpty) fields['contactPhone'] = _phoneCtrl.text.trim();
       if (_emailCtrl.text.trim().isNotEmpty) fields['contactEmail'] = _emailCtrl.text.trim();
 
-      // Debug log to verify outgoing payload values
       // ignore: avoid_print
-      print('[CreateRoom] fields: '+fields.toString()+', images: '+_images.length.toString());
-      await _service.createRoom(token, fields: fields, images: _images);
+      print('[UpdateRoom] id=${widget.room.id}, fields: ' + fields.toString() + ', newImages: ' + _newImages.length.toString());
+
+      await _service.updateRoom(token, widget.room.id, fields: fields, images: _newImages);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listing created')));
-      final popped = await Navigator.of(context).maybePop(true);
-      if (!popped && mounted) {
-        // If there's nothing to pop, just keep the page; parent can listen to a state change or pull-to-refresh.
-        // Optionally, you could navigate to listings here if you have a named route.
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listing updated')));
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -169,6 +162,7 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      appBar: AppBar(title: const Text('Edit Listing')),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -217,9 +211,7 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: RoomService.roomTypes.contains(_roomType) ? _roomType : RoomService.roomTypes.first,
-                      items: RoomService.roomTypes
-                          .map((v) => DropdownMenuItem(value: v, child: Text(_labelize(v))))
-                          .toList(),
+                      items: RoomService.roomTypes.map((v) => DropdownMenuItem(value: v, child: Text(_labelize(v)))).toList(),
                       onChanged: (v) => setState(() => _roomType = v ?? RoomService.roomTypes.first),
                       decoration: const InputDecoration(labelText: 'Room Type *'),
                     ),
@@ -228,9 +220,7 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: RoomService.genderPreferences.contains(_gender) ? _gender : RoomService.genderPreferences.last,
-                      items: RoomService.genderPreferences
-                          .map((v) => DropdownMenuItem(value: v, child: Text(_labelize(v))))
-                          .toList(),
+                      items: RoomService.genderPreferences.map((v) => DropdownMenuItem(value: v, child: Text(_labelize(v)))).toList(),
                       onChanged: (v) => setState(() => _gender = v ?? RoomService.genderPreferences.last),
                       decoration: const InputDecoration(labelText: 'Gender Preference *'),
                     ),
@@ -252,9 +242,32 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amenitiesCtrl,
-                decoration: const InputDecoration(labelText: 'Amenities (comma separated)'),
+                decoration: const InputDecoration(
+                  labelText: 'Amenities (comma separated)',
+                  helperText: 'Example: Wifi, Parking, Kitchen',
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              Text('Images', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _ExistingImagesGrid(
+                images: _existingImages,
+                onRemove: (img) => setState(() => _existingImages.remove(img)), // UI only removal; backend removal would need API support
+              ),
+              const SizedBox(height: 8),
+              _NewImagesGrid(
+                images: _newImages,
+                onRemove: (i) => setState(() => _newImages.removeAt(i)),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(onPressed: _pickImages, icon: const Icon(Icons.image_outlined), label: const Text('Add Images')),
+                  const SizedBox(width: 12),
+                  Text('${_newImages.length} new image(s) to add'),
+                ],
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
@@ -274,64 +287,88 @@ class _LandlordNewListingPageState extends State<LandlordNewListingPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text('Images', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: _pickImages,
-                    icon: const Icon(Icons.photo_library_rounded),
-                    label: const Text('Pick Images'),
-                  ),
-                  const SizedBox(width: 12),
-                  if (_images.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${_images.length} selected',
-                        style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (_images.isNotEmpty)
-                SizedBox(
-                  height: 90,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemBuilder: (_, i) => ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(_images[i].bytes, width: 120, height: 90, fit: BoxFit.cover),
-                    ),
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemCount: _images.length,
-                  ),
-                ),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                child: FilledButton(
                   onPressed: _submitting ? null : _submit,
-                  icon: _submitting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.add_circle_outline_rounded),
-                  label: const Text('Create Listing'),
+                  child: _submitting
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save Changes'),
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ExistingImagesGrid extends StatelessWidget {
+  final List<RoomImage> images;
+  final ValueChanged<RoomImage> onRemove;
+  const _ExistingImagesGrid({required this.images, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    if (images.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final img in images)
+          Stack(
+            alignment: Alignment.topRight,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(img.imageUrl, width: 100, height: 100, fit: BoxFit.cover),
+              ),
+              IconButton(
+                onPressed: () => onRemove(img),
+                style: IconButton.styleFrom(backgroundColor: Colors.black54, foregroundColor: Colors.white),
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Remove (UI only)',
+              ),
+            ],
+          )
+      ],
+    );
+  }
+}
+
+class _NewImagesGrid extends StatelessWidget {
+  final List<UploadImage> images;
+  final ValueChanged<int> onRemove;
+  const _NewImagesGrid({required this.images, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    if (images.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (int i = 0; i < images.length; i++)
+          Stack(
+            alignment: Alignment.topRight,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                color: Colors.grey.shade200,
+                child: const Icon(Icons.image, size: 36),
+              ),
+              IconButton(
+                onPressed: () => onRemove(i),
+                style: IconButton.styleFrom(backgroundColor: Colors.black54, foregroundColor: Colors.white),
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Remove',
+              ),
+            ],
+          )
+      ],
     );
   }
 }
