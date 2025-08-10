@@ -7,6 +7,7 @@ import '../../viewmodels/auth_view_model.dart';
 import '../../../data/models/room_image.dart';
 import '../../../main.dart';
 import 'landlord_edit_listing_page.dart';
+import '../../../core/constants/api_constants.dart';
 
 class LandlordListingsPage extends StatefulWidget {
   const LandlordListingsPage({super.key});
@@ -257,6 +258,34 @@ class _LandlordListingsPageState extends State<LandlordListingsPage> with RouteA
   }
 }
 
+String _normalizeUrl(String url) {
+  var s = url.trim();
+  if (s.isEmpty) return s;
+  s = s.replaceAll('res.cloudinaru.com', 'res.cloudinary.com');
+  if (s.startsWith('//')) s = 'https:$s';
+  // Prefix backend base URL for relative paths
+  if (!s.startsWith('http://') && !s.startsWith('https://')) {
+    if (!s.startsWith('/')) s = '/$s';
+    s = '${ApiConstants.baseUrl}$s';
+  }
+  // Replace localhost/127.0.0.1 with emulator-friendly base origin and only force https for Cloudinary
+  try {
+    final uri = Uri.tryParse(s);
+    final base = Uri.parse(ApiConstants.baseUrl);
+    if (uri != null && uri.hasAuthority) {
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        final replaced = uri.replace(scheme: base.scheme, host: base.host, port: base.hasPort ? base.port : null);
+        s = replaced.toString();
+      }
+      if (uri.host.contains('cloudinary.com') && uri.scheme != 'https') {
+        final replaced = uri.replace(scheme: 'https', port: null);
+        s = replaced.toString();
+      }
+    }
+  } catch (_) {}
+  return s;
+}
+
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
@@ -374,12 +403,46 @@ class _ImagePagerState extends State<_ImagePager> {
                 controller: _controller,
                 itemCount: total,
                 onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (_, i) => Image.network(
-                  widget.images[i].imageUrl,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                ),
+                itemBuilder: (_, i) {
+                  final original = widget.images[i].imageUrl;
+                  final url = _normalizeUrl(original);
+                  // Debug: log original vs normalized URL
+                  debugPrint('Landlord IMG => original: $original | normalized: $url');
+                  return Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Container(
+                        color: theme.colorScheme.surfaceVariant,
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) {
+                      // Debug: log network image error
+                      debugPrint('Landlord IMG ERROR for $url => $error');
+                      return Container(
+                        color: theme.colorScheme.surfaceVariant,
+                        alignment: Alignment.center,
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image_outlined, size: 32, color: Colors.grey),
+                            SizedBox(height: 6),
+                            Text('Image unavailable', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             if (total > 0)
               Positioned(

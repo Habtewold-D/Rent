@@ -20,8 +20,8 @@ class RoomService {
   final String baseUrl;
   RoomService({String? baseUrl}) : baseUrl = baseUrl ?? ApiConstants.baseUrl;
 
-  // Enum options mirrored from backend Room model
-  static const List<String> roomTypes = ['single', 'shared', 'studio', 'apartment'];
+  // Enum options mirrored from backend Room model (removed 'shared')
+  static const List<String> roomTypes = ['single', 'studio', 'apartment'];
   static const List<String> genderPreferences = ['male', 'female', 'mixed'];
 
   Uri _u(String path, [Map<String, dynamic>? q]) => Uri.parse('$baseUrl$path').replace(queryParameters: q?.map((k, v) => MapEntry(k, v.toString())));
@@ -65,6 +65,50 @@ class RoomService {
       final msg = _extractError(body) ?? 'Failed to delete room';
       throw Exception('$msg (HTTP ${res.statusCode})');
     }
+  }
+
+  Future<Map<String, dynamic>> getPublicRooms({
+    String? city,
+    String? roomType,
+    String? genderPreference,
+    num? minRent,
+    num? maxRent,
+    int page = 1,
+    int limit = 10,
+    String sortBy = 'createdAt',
+    String sortOrder = 'DESC',
+    bool includePending = true,
+  }) async {
+    final query = <String, dynamic>{
+      'page': page,
+      'limit': limit,
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
+    };
+    if (city != null && city.trim().isNotEmpty) query['city'] = city;
+    if (roomType != null && roomType.trim().isNotEmpty) query['roomType'] = roomType;
+    if (genderPreference != null && genderPreference.trim().isNotEmpty) query['genderPreference'] = genderPreference;
+    if (minRent != null) query['minRent'] = minRent;
+    if (maxRent != null) query['maxRent'] = maxRent;
+
+    // Allow including pending (unapproved) rooms during development/testing
+    if (includePending) query['includePending'] = true;
+    final res = await http.get(_u('/api/rooms', query));
+    final body = _decode(res);
+    if (res.statusCode != 200 || body['success'] != true) {
+      final msg = _extractError(body) ?? 'Failed to get rooms';
+      throw Exception('$msg (HTTP ${res.statusCode})');
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final roomsRaw = (data['rooms'] is List) ? data['rooms'] as List : <dynamic>[];
+    final rooms = roomsRaw
+        .map((e) => e is Map<String, dynamic> ? Room.fromJson(e) : Room.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final pagination = (data['pagination'] is Map<String, dynamic>) ? data['pagination'] as Map<String, dynamic> : {};
+    return {
+      'rooms': rooms,
+      'pagination': pagination,
+    };
   }
 
   Future<Room> createRoom(

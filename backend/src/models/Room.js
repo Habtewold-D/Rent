@@ -23,7 +23,7 @@ const Room = sequelize.define('Room', {
     }
   },
   roomType: {
-    type: DataTypes.ENUM('single', 'shared', 'studio', 'apartment'),
+    type: DataTypes.ENUM('single', 'studio', 'apartment'),
     allowNull: false
   },
   maxOccupants: {

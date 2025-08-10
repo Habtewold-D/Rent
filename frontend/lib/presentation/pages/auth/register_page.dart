@@ -72,6 +72,20 @@ class _RegisterPageState extends State<RegisterPage> {
                       const SizedBox(height: 8),
                       Text('Join and find your perfect roommates', style: Theme.of(context).textTheme.bodyMedium),
                       const SizedBox(height: 24),
+                      if (auth.error != null && auth.error!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: MaterialBanner(
+                            backgroundColor: Colors.red.withOpacity(0.1),
+                            content: Text(auth.error!, style: const TextStyle(color: Colors.red)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => context.read<AuthViewModel>().logout(),
+                                child: const Text('Dismiss'),
+                              )
+                            ],
+                          ),
+                        ),
                       Form(
                         key: _formKey,
                         child: Column(
@@ -201,6 +215,10 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registered successfully')));
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
+    } else {
+      if (!mounted) return;
+      final err = context.read<AuthViewModel>().error ?? 'Registration failed';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     }
   }
 }

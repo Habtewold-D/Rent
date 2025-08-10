@@ -12,7 +12,7 @@ const matchingController = {};
 matchingController.joinRoom = async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { userAge, desiredGroupSize, religionPreference } = req.body;
+    const { userAge, desiredGroupSize, religionPreference, genderPreference } = req.body;
     const userId = req.user.id;
 
     // Get room details
@@ -86,13 +86,13 @@ matchingController.joinRoom = async (req, res) => {
       ]
     });
 
-    // Filter compatible groups
+    // Filter compatible groups (exact size match)
     const compatibleGroups = allGroups.filter(group => {
       // Check if user already in this group
       const isAlreadyMember = group.members.some(member => member.userId === userId);
       if (isAlreadyMember) return false;
 
-      // Check group size compatibility
+      // Check group size compatibility (exact matches only here)
       if (group.targetSize !== desiredGroupSize) return false;
 
       // Check age compatibility with group creator's range
@@ -103,11 +103,38 @@ matchingController.joinRoom = async (req, res) => {
         if (group.religionPreference !== religionPreference) return false;
       }
 
+      // Optional gender preference: if provided by requester, only show groups in rooms that are compatible
+      // Room genderPreference: 'male' | 'female' | 'mixed'
+      if (genderPreference && genderPreference !== 'any' && genderPreference !== 'mixed') {
+        if (group.room && group.room.genderPreference) {
+          const roomPref = group.room.genderPreference;
+          if (!(roomPref === 'mixed' || roomPref === genderPreference)) return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Also find near-size groups (difference of 1) that otherwise match
+    const nearSizeGroups = allGroups.filter(group => {
+      const isAlreadyMember = group.members.some(member => member.userId === userId);
+      if (isAlreadyMember) return false;
+      if (Math.abs(group.targetSize - desiredGroupSize) !== 1) return false;
+      if (finalAge < group.ageRangeMin || finalAge > group.ageRangeMax) return false;
+      if (group.religionPreference !== 'any' && religionPreference !== 'any') {
+        if (group.religionPreference !== religionPreference) return false;
+      }
+      if (genderPreference && genderPreference !== 'any' && genderPreference !== 'mixed') {
+        if (group.room && group.room.genderPreference) {
+          const roomPref = group.room.genderPreference;
+          if (!(roomPref === 'mixed' || roomPref === genderPreference)) return false;
+        }
+      }
       return true;
     });
 
     // Separate recommended vs other groups
-    const recommendedGroups = compatibleGroups.filter(group => {
+    let recommendedGroups = compatibleGroups.filter(group => {
       // Prioritize groups matching religion preference
       if (religionPreference !== 'any' && group.religionPreference === religionPreference) {
         return true;
@@ -115,7 +142,22 @@ matchingController.joinRoom = async (req, res) => {
       return false;
     });
 
-    const otherGroups = compatibleGroups.filter(group => !recommendedGroups.includes(group));
+    // If none matched strictly by religion, use all compatible groups as recommended
+    if (recommendedGroups.length === 0) {
+      if (compatibleGroups.length > 0) {
+        recommendedGroups = [...compatibleGroups];
+      } else if (nearSizeGroups.length > 0) {
+        // Promote near-size groups to recommended when no exact-size compatible groups exist
+        recommendedGroups = [...nearSizeGroups];
+      }
+    }
+
+    const otherGroups = [
+      // any compatible not already recommended
+      ...compatibleGroups.filter(group => !recommendedGroups.includes(group)),
+      // any near-size not already recommended
+      ...nearSizeGroups.filter(group => !recommendedGroups.includes(group))
+    ];
 
     // Format response
     const formatGroup = (group) => ({
@@ -241,6 +283,7 @@ matchingController.joinGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
     const userId = req.user.id;
+    const { userAge, religionPreference } = req.body || {};
 
     // Get group with members
     const group = await MatchGroup.findByPk(groupId, {
@@ -259,7 +302,7 @@ matchingController.joinGroup = async (req, res) => {
         {
           model: Room,
           as: 'room',
-          attributes: ['title', 'monthlyRent', 'genderPreference']
+          attributes: ['id', 'monthlyRent', 'genderPreference', 'address', 'city']
         }
       ]
     });
@@ -280,7 +323,7 @@ matchingController.joinGroup = async (req, res) => {
     }
 
     // Check if user already in group
-    const isAlreadyMember = group.GroupMembers.some(member => member.userId === userId);
+    const isAlreadyMember = (group.members || []).some(member => member.userId === userId);
     if (isAlreadyMember) {
       return res.status(400).json({
         success: false,
@@ -290,16 +333,25 @@ matchingController.joinGroup = async (req, res) => {
 
     // Get user details for compatibility check
     const user = await User.findByPk(userId);
-    
+    const finalAge = user.age || userAge;
+    if (!finalAge) {
+      return res.status(400).json({ success: false, message: 'Age is required to join a group' });
+    }
+
     // Check compatibility
-    if (user.age < group.ageRangeMin || user.age > group.ageRangeMax) {
+    if (finalAge < group.ageRangeMin || finalAge > group.ageRangeMax) {
       return res.status(400).json({
         success: false,
         message: 'Age not compatible with group requirements'
       });
     }
 
-    if (group.religionPreference !== 'any' && user.religion !== group.religionPreference) {
+    const userReligion = user.religion || religionPreference || 'any';
+    if (
+      group.religionPreference !== 'any' &&
+      userReligion !== 'any' &&
+      userReligion !== group.religionPreference
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Religion preference not compatible with group'
@@ -325,6 +377,17 @@ matchingController.joinGroup = async (req, res) => {
       currentSize: newSize,
       targetSize: group.targetSize
     });
+
+    // If group is now complete, send completion notifications with payment info
+    if (newSize >= group.targetSize) {
+      await notifyGroupMembers(groupId, 'group_complete', {
+        costPerPerson: group.costPerPerson,
+        payRequired: true,
+        payLabel: 'Pay now',
+        // Frontend can construct a deep link or route; include placeholders
+        payUrl: `/payments/rooms/${group.roomId}/groups/${group.id}`
+      });
+    }
 
     res.json({
       success: true,
@@ -396,6 +459,8 @@ matchingController.getMyGroups = async (req, res) => {
           costPerPerson: group.costPerPerson,
           status: group.status,
           isCreator: membership.isCreator,
+          religionPreference: group.religionPreference,
+          ageRange: `${group.ageRangeMin}-${group.ageRangeMax}`,
           members: (group.members || []).map(member => ({
             firstName: member.user?.firstName,
             age: member.user?.age,

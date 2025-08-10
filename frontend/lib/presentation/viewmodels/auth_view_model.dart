@@ -11,6 +11,10 @@ class AuthViewModel extends ChangeNotifier {
   String? _role;
   String? _userName;
   String? _userEmail;
+  String? _userGender;
+  int? _userAge;
+  String? _userProfession;
+  String? _userReligion;
 
   bool get loading => _loading;
   String? get error => _error;
@@ -18,6 +22,10 @@ class AuthViewModel extends ChangeNotifier {
   String? get role => _role;
   String? get userName => _userName;
   String? get userEmail => _userEmail;
+  String? get userGender => _userGender;
+  int? get userAge => _userAge;
+  String? get userProfession => _userProfession;
+  String? get userReligion => _userReligion;
 
   Future<bool> login(String email, String password) async {
     _setLoading(true);
@@ -30,6 +38,15 @@ class AuthViewModel extends ChangeNotifier {
       final last = user?['lastName'] as String?;
       _userName = [first, last].where((s) => (s ?? '').isNotEmpty).join(' ').trim();
       _userEmail = user?['email'] as String?;
+      _userGender = user?['gender']?.toString();
+      final dynamic _ageVal = user?['age'];
+      if (_ageVal is int) {
+        _userAge = _ageVal;
+      } else {
+        _userAge = int.tryParse(_ageVal?.toString() ?? '');
+      }
+      _userProfession = user?['profession']?.toString();
+      _userReligion = user?['religion']?.toString();
       _error = null;
       return true;
     } catch (e) {
@@ -60,8 +77,9 @@ class AuthViewModel extends ChangeNotifier {
         phone: phone,
         gender: gender,
       );
-      _token = res['data']?['token'] as String?; // backend returns token under data.token
-      final user = res['data']?['user'] as Map<String, dynamic>?;
+      // Flexible parsing: token can be at data.token or top-level token
+      _token = (res['data']?['token'] as String?) ?? (res['token'] as String?);
+      final user = (res['data']?['user'] as Map<String, dynamic>?) ?? (res['user'] as Map<String, dynamic>?);
       _role = user?['role'] as String?;
       final first = user?['firstName'] as String?;
       final last = user?['lastName'] as String?;
@@ -94,6 +112,10 @@ class AuthViewModel extends ChangeNotifier {
     _role = null;
     _userName = null;
     _userEmail = null;
+    _userGender = null;
+    _userAge = null;
+    _userProfession = null;
+    _userReligion = null;
     _error = null;
     notifyListeners();
   }

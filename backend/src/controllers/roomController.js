@@ -102,8 +102,11 @@ const getAllRooms = async (req, res) => {
     // Build where clause
     const whereClause = {
       isAvailable: true,
-      isApproved: true
     };
+    // Only show approved by default; allow including pending for development/testing via query
+    if (req.query.includePending !== 'true') {
+      whereClause.isApproved = true;
+    }
 
     if (city) whereClause.city = { [Op.iLike]: `%${city}%` };
     if (roomType) whereClause.roomType = roomType;

@@ -24,5 +24,6 @@ class ApiConstants {
   static const String joinRoom = '/api/matching/join-room'; // + '/:roomId'
   static const String createGroup = '/api/matching/create-group'; // + '/:roomId'
   static const String myGroups = '/api/matching/my-groups';
+  static const String groupsBase = '/api/matching/groups'; // + '/:groupId/(join|leave)'
   static const String notifications = '/api/matching/notifications';
 }

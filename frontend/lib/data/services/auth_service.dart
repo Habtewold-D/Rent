@@ -34,16 +34,8 @@ class AuthService {
       'lastName': lastName,
       'email': email,
       'password': password,
-      // Common alternates some backends expect
-      'first_name': firstName,
-      'last_name': lastName,
-      'confirmPassword': confirmPassword ?? password,
-      'password_confirmation': confirmPassword ?? password,
-      // Backend required fields
       'phone': phone,
-      'phone_number': phone,
-      'gender': gender, // expects 'male' or 'female'
-      'Gender': gender,
+      'gender': gender,
     };
     final res = await _client.post(
       Uri.parse('${ApiConstants.baseUrl}${ApiConstants.register}'),
