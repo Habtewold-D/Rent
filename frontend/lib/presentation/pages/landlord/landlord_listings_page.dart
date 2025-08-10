@@ -8,6 +8,7 @@ import '../../../data/models/room_image.dart';
 import '../../../main.dart';
 import 'landlord_edit_listing_page.dart';
 import '../../../core/constants/api_constants.dart';
+import '../notifications/notifications_page.dart';
 
 class LandlordListingsPage extends StatefulWidget {
   const LandlordListingsPage({super.key});
@@ -133,6 +134,16 @@ class _LandlordListingsPageState extends State<LandlordListingsPage> with RouteA
                 onPressed: _loading ? null : () => _load(reset: true),
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh',
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Notifications',
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                  );
+                },
               ),
             ],
           ),

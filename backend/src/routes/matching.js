@@ -43,5 +43,10 @@ router.get('/my-groups', authenticate, matchingController.getMyGroups);
 // Notification routes
 router.get('/notifications', authenticate, matchingController.getNotifications);
 router.put('/notifications/:notificationId/read', authenticate, matchingController.markNotificationRead);
+router.put('/notifications/read-all', authenticate, matchingController.markAllNotificationsRead);
+router.post('/notifications/send', authenticate, matchingController.notifyUsers);
+
+// Maintenance routes
+router.post('/groups/expire-unpaid', authenticate, matchingController.expireUnpaidMembers);
 
 module.exports = router;

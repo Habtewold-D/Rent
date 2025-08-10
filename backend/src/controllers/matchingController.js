@@ -621,24 +621,101 @@ const notifyGroupMembers = async (groupId, type, data) => {
     });
 
     let title, message;
-    
+    // Fetch group for potential routing payload (e.g., cost/room)
+    const group = await MatchGroup.findByPk(groupId);
+    // Derive a friendly group name from its room
+    let groupName = `Group ${String(groupId).slice(0, 8)}`;
+    try {
+      if (group && group.roomId) {
+        const room = await Room.findByPk(group.roomId, { attributes: ['id', 'address', 'city'] });
+        if (room) {
+          const address = room.address || '';
+          const city = room.city || '';
+          groupName = [address, city].filter(Boolean).join(', ').trim() || groupName;
+        }
+      }
+    } catch (_) {
+      // ignore room fetch issues; fallback to default groupName
+    }
+    const creatorId = group ? group.creatorId : null;
+    const memberUserIds = groupMembers.map(m => m.userId);
+
     switch (type) {
       case 'member_joined':
-        title = 'New Member Joined!';
-        message = `${data.newMemberName} joined your group. ${data.currentSize}/${data.targetSize} members.`;
-        break;
+        title = `New Member Joined — ${groupName}`;
+        message = `${data.newMemberName} joined your group "${groupName}". ${data.currentSize}/${data.targetSize} members.`;
+        // Notify only the creator
+        if (!creatorId) return;
+        await Notification.create({
+          userId: creatorId,
+          type,
+          title,
+          message,
+          relatedGroupId: groupId,
+          data: Object.assign({ groupName }, data || {})
+        });
+        return;
       case 'member_left':
-        title = 'Member Left Group';
-        message = `${data.leftMemberName} left the group. ${data.currentSize}/${data.targetSize} members.`;
+        title = `Member Left — ${groupName}`;
+        message = `${data.leftMemberName} left the group "${groupName}". ${data.currentSize}/${data.targetSize} members.`;
         break;
       case 'group_complete':
-        title = 'Group Complete!';
-        message = 'Your group is now full and ready for booking!';
-        break;
+        // Send distinct notifications:
+        // 1) To creator: management notice (no pay prompt by default)
+        if (creatorId) {
+          await Notification.create({
+            userId: creatorId,
+            type: 'group_complete',
+            title: `Group Complete — ${groupName}`,
+            message: `Your group "${groupName}" is now full and ready for booking!`
+              ,
+            relatedGroupId: groupId,
+            data: Object.assign({ groupName }, (data && typeof data === 'object') ? data : {})
+          });
+        }
+        // 2) To other members: pay now with routing to bookings
+        {
+          const costPerPerson = group && group.costPerPerson ? group.costPerPerson : undefined;
+          const roomId = group && group.roomId ? group.roomId : undefined;
+          const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+          const payData = {
+            screen: 'bookings',
+            params: {
+              payRequired: true,
+              payLabel: 'Pay now',
+              payUrl: `/payments/rooms/${roomId || ''}/groups/${groupId}`,
+              costPerPerson: costPerPerson,
+              expiresAt: expiresAt.toISOString(),
+              groupId: groupId,
+              roomId: roomId,
+            },
+            groupName,
+          };
+          const recipients = memberUserIds.filter(uid => creatorId ? uid !== creatorId : true);
+          if (recipients.length) {
+            const items = recipients.map(uid => ({
+              userId: uid,
+              type: 'group_complete',
+              title: `Group Complete — ${groupName}`,
+              message: `"${groupName}" is full. Please complete your payment to proceed.`,
+              relatedGroupId: groupId,
+              data: payData,
+            }));
+            await Notification.bulkCreate(items);
+
+            // Set payment window for recipients
+            await GroupMember.update(
+              { paymentStatus: 'pending', paymentDueAt: expiresAt },
+              { where: { groupId, userId: recipients, status: 'active' } }
+            );
+          }
+        }
+        return;
       default:
         return;
     }
 
+    // Fallback (for types not explicitly handled above): notify all members
     const notifications = groupMembers.map(member => ({
       userId: member.userId,
       type,
@@ -647,7 +724,6 @@ const notifyGroupMembers = async (groupId, type, data) => {
       relatedGroupId: groupId,
       data
     }));
-
     await Notification.bulkCreate(notifications);
 
   } catch (error) {
@@ -700,6 +776,63 @@ matchingController.getNotifications = async (req, res) => {
   }
 };
 
+// Expire unpaid members past their paymentDueAt and reopen groups
+// Optional query: ?groupId=...
+matchingController.expireUnpaidMembers = async (req, res) => {
+  try {
+    const { groupId } = req.query || {};
+    const where = {
+      status: 'active',
+      paymentStatus: 'pending',
+    };
+    if (groupId) where.groupId = groupId;
+
+    const candidates = await GroupMember.findAll({ where });
+    const now = new Date();
+    const overdue = candidates.filter(m => m.paymentDueAt && new Date(m.paymentDueAt) < now);
+
+    if (overdue.length === 0) {
+      return res.json({ success: true, message: 'No overdue members', data: { updatedGroups: 0, removedMembers: 0 } });
+    }
+
+    // Group overdue members by groupId
+    const byGroup = overdue.reduce((acc, m) => {
+      acc[m.groupId] = acc[m.groupId] || [];
+      acc[m.groupId].push(m);
+      return acc;
+    }, {});
+
+    let updatedGroups = 0;
+    let removedMembers = 0;
+
+    for (const [gid, members] of Object.entries(byGroup)) {
+      // Mark members as left + expired
+      const memberIds = members.map(m => m.id);
+      await GroupMember.update(
+        { status: 'left', paymentStatus: 'expired' },
+        { where: { id: memberIds } }
+      );
+      removedMembers += members.length;
+
+      // Recompute group size and status
+      const group = await MatchGroup.findByPk(gid);
+      if (!group) continue;
+      const activeCount = await GroupMember.count({ where: { groupId: gid, status: 'active' } });
+      const updates = { currentSize: activeCount };
+      if (group.status === 'complete' && activeCount < group.targetSize) {
+        updates.status = 'forming';
+      }
+      await group.update(updates);
+      updatedGroups++;
+    }
+
+    res.json({ success: true, message: 'Expired unpaid members processed', data: { updatedGroups, removedMembers } });
+  } catch (error) {
+    console.error('Error expiring unpaid members:', error);
+    res.status(500).json({ success: false, message: 'Failed to expire unpaid members', error: error.message });
+  }
+};
+
 // Mark notification as read
 matchingController.markNotificationRead = async (req, res) => {
   try {
@@ -734,6 +867,44 @@ matchingController.markNotificationRead = async (req, res) => {
       message: 'Failed to mark notification as read',
       error: error.message
     });
+  }
+};
+
+// Mark all notifications as read for current user
+matchingController.markAllNotificationsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await Notification.update({ isRead: true }, { where: { userId, isRead: false } });
+    const unreadCount = await Notification.count({ where: { userId, isRead: false } });
+    res.json({ success: true, message: 'All notifications marked as read', data: { unreadCount } });
+  } catch (error) {
+    console.error('Error marking all notifications read:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark all notifications as read', error: error.message });
+  }
+};
+
+// Send a notification to specific users
+// Expects body: { userIds: number[], type: string, title?: string, message?: string, data?: object }
+matchingController.notifyUsers = async (req, res) => {
+  try {
+    const { userIds, type } = req.body || {};
+    let { title, message, data } = req.body || {};
+    if (!Array.isArray(userIds) || userIds.length === 0 || typeof type !== 'string' || !type) {
+      return res.status(400).json({ success: false, message: 'userIds[] and type are required' });
+    }
+    // Provide safe defaults to satisfy NOT NULL constraints
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      title = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      message = 'You have a new notification';
+    }
+    const items = userIds.map(uid => ({ userId: uid, type, title, message, data }));
+    await Notification.bulkCreate(items);
+    res.json({ success: true, message: 'Notifications sent', data: { count: items.length } });
+  } catch (error) {
+    console.error('Error sending user notifications:', error);
+    res.status(500).json({ success: false, message: 'Failed to send notifications', error: error.message });
   }
 };
 

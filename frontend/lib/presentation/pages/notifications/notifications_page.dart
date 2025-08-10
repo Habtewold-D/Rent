@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../data/services/matching_service.dart';
+import '../renter/renter_bookings_page.dart';
+import '../../navigation/notification_router.dart';
+import '../../viewmodels/auth_view_model.dart';
 
 class NotificationsPage extends StatefulWidget {
-  final String token;
-  const NotificationsPage({super.key, required this.token});
+  const NotificationsPage({super.key});
 
   @override
   State<NotificationsPage> createState() => _NotificationsPageState();
@@ -19,7 +22,22 @@ class _NotificationsPageState extends State<NotificationsPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _markAllAndLoad();
+  }
+
+  Future<void> _markAllAndLoad() async {
+    final token = context.read<AuthViewModel?>()?.token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'You must be logged in to view notifications';
+      });
+      return;
+    }
+    try {
+      await _service.markAllNotificationsRead(token);
+    } catch (_) {}
+    await _load();
   }
 
   Future<void> _load() async {
@@ -28,7 +46,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
       _error = null;
     });
     try {
-      final list = await _service.getNotifications(widget.token);
+      final token = context.read<AuthViewModel?>()?.token;
+      if (token == null || token.isEmpty) {
+        throw Exception('You must be logged in to view notifications');
+      }
+      final data = await _service.getNotifications(token);
+      final list = (data['notifications'] is List) ? data['notifications'] as List<dynamic> : const <dynamic>[];
       setState(() => _items = list);
     } catch (e) {
       setState(() => _error = e.toString());
@@ -42,9 +65,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
-        actions: [
-          IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
-        ],
       ),
       body: SafeArea(
         child: Column(
@@ -67,13 +87,55 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         final type = ((n is Map) ? (n['type'] ?? '') : '').toString();
                         final title = ((n is Map) ? (n['title'] ?? '') : '').toString();
                         final message = ((n is Map) ? (n['message'] ?? '') : '').toString();
-                        final payload = (n is Map && n['payload'] is Map) ? (n['payload'] as Map) : const {};
+                        // Prefer 'data' (DB column), fallback to legacy 'payload'
+                        final rawPayload = (n is Map && n['data'] is Map)
+                            ? (n['data'] as Map)
+                            : (n is Map && n['payload'] is Map)
+                                ? (n['payload'] as Map)
+                                : const {};
+                        final Map<String, dynamic> payload = {
+                          ...rawPayload.cast<String, dynamic>(),
+                        };
                         final payRequired = (payload['payRequired'] == true);
                         final payLabel = (payload['payLabel'] ?? 'Pay').toString();
                         final payUrl = (payload['payUrl'] ?? '').toString();
                         final costPerPerson = payload['costPerPerson'];
+                        void _routeFromPayload() {
+                          final screen = (payload['screen'] ?? '').toString();
+                          if (screen.isNotEmpty) {
+                            // When using router-based payload structure, expect params inside 'params'
+                            final params = (payload['params'] is Map)
+                                ? (payload['params'] as Map).cast<String, dynamic>()
+                                : <String, dynamic>{
+                                    // backward-compat: allow flat payment fields
+                                    'payUrl': payUrl,
+                                    'payLabel': payLabel,
+                                    'costPerPerson': costPerPerson,
+                                  };
+                            NotificationRouter.navigate(context, {
+                              'screen': screen,
+                              'params': params,
+                            });
+                            return;
+                          }
+                          // Fallback: direct to bookings if payment data present
+                          if (payRequired && payUrl.isNotEmpty) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => RenterBookingsPage(
+                                  payUrl: payUrl,
+                                  payLabel: payLabel,
+                                  costPerPerson: (costPerPerson is num) ? costPerPerson.toDouble() : null,
+                                  source: 'notification',
+                                ),
+                              ),
+                            );
+                          }
+                        }
                         return Card(
-                          child: Padding(
+                          child: InkWell(
+                            onTap: _routeFromPayload,
+                            child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,12 +153,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   children: [
                                     if (payRequired && payUrl.isNotEmpty)
                                       FilledButton(
-                                        onPressed: () {
-                                          // TODO: Navigate to your payment route with payUrl
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Proceed to payment: $payUrl')),
-                                          );
-                                        },
+                                        onPressed: _routeFromPayload,
                                         child: Text(payLabel),
                                       ),
                                   ],
@@ -104,6 +161,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                               ],
                             ),
                           ),
+                        ),
                         );
                       },
                       separatorBuilder: (_, __) => const SizedBox(height: 8),

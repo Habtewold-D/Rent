@@ -134,7 +134,7 @@ class MatchingService {
     return <dynamic>[];
   }
 
-  Future<List<dynamic>> getNotifications(
+  Future<Map<String, dynamic>> getNotifications(
     String token,
   ) async {
     final res = await http.get(
@@ -145,9 +145,60 @@ class MatchingService {
     if (res.statusCode != 200 || body['success'] != true) {
       throw Exception(_extractError(body) ?? 'Failed to fetch notifications');
     }
-    final data = body['data'];
-    if (data is List) return data;
-    if (data is Map && data['notifications'] is List) return data['notifications'] as List<dynamic>;
-    return <dynamic>[];
+    final data = (body['data'] is Map<String, dynamic>) ? body['data'] as Map<String, dynamic> : <String, dynamic>{};
+    final notifications = (data['notifications'] is List) ? data['notifications'] as List<dynamic> : <dynamic>[];
+    final unreadCount = int.tryParse('${data['unreadCount'] ?? 0}') ?? 0;
+    return {
+      'notifications': notifications,
+      'unreadCount': unreadCount,
+    };
+  }
+
+  Future<void> markNotificationRead(String token, String notificationId) async {
+    final res = await http.put(
+      _u('${ApiConstants.notificationsReadBase}/$notificationId/read'),
+      headers: _authHeaders(token),
+    );
+    final body = _decode(res);
+    if (res.statusCode != 200 || body['success'] != true) {
+      throw Exception(_extractError(body) ?? 'Failed to mark notification as read');
+    }
+  }
+
+  Future<void> markAllNotificationsRead(String token) async {
+    final res = await http.put(
+      _u('${ApiConstants.notificationsReadBase}/read-all'),
+      headers: _authHeaders(token),
+    );
+    final body = _decode(res);
+    if (res.statusCode != 200 || body['success'] != true) {
+      throw Exception(_extractError(body) ?? 'Failed to mark all notifications as read');
+    }
+  }
+
+  Future<void> sendTargetedNotification(
+    String token, {
+    required List<String> userIds,
+    required String type,
+    String? title,
+    String? message,
+    Map<String, dynamic>? data,
+  }) async {
+    final payload = <String, dynamic>{
+      'userIds': userIds,
+      'type': type,
+      if (title != null) 'title': title,
+      if (message != null) 'message': message,
+      if (data != null) 'data': data,
+    };
+    final res = await http.post(
+      _u(ApiConstants.notificationsSend),
+      headers: _authHeaders(token),
+      body: jsonEncode(payload),
+    );
+    final body = _decode(res);
+    if (res.statusCode != 200 || body['success'] != true) {
+      throw Exception(_extractError(body) ?? 'Failed to send notifications');
+    }
   }
 }

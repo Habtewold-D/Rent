@@ -8,6 +8,7 @@ import 'landlord_bookings_page.dart';
 import 'landlord_profile_page.dart';
 import 'landlord_verification_page.dart';
 import '../auth/login_page.dart';
+import '../../widgets/notification_bell.dart';
 
 class LandlordHome extends StatefulWidget {
   const LandlordHome({super.key});
@@ -44,7 +45,10 @@ class _LandlordHomeState extends State<LandlordHome> {
     final email = auth.userEmail ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_index])),
+      appBar: AppBar(
+        title: Text(_titles[_index]),
+        actions: const [NotificationBell()],
+      ),
       drawer: Drawer(
         child: ListView(
           children: [

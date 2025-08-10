@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../data/services/matching_service.dart';
 import '../../../core/constants/api_constants.dart';
 import '../notifications/notifications_page.dart';
+import '../../widgets/notification_bell.dart';
 
 class RentWithOthersPage extends StatefulWidget {
   final String token;
@@ -317,19 +318,7 @@ class _RentWithOthersPageState extends State<RentWithOthersPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Rent with others'),
-        actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            icon: const Icon(Icons.notifications),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => NotificationsPage(token: widget.token),
-                ),
-              );
-            },
-          ),
-        ],
+        actions: const [NotificationBell()],
       ),
       body: SafeArea(
         child: Column(

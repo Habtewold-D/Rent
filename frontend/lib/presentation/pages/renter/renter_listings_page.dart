@@ -8,6 +8,7 @@ import '../../viewmodels/auth_view_model.dart';
 import '../../../data/services/matching_service.dart';
 import '../../../core/constants/api_constants.dart';
 import 'rent_with_others_page.dart';
+// Removed local notifications imports; Home AppBar hosts the bell globally
 
 class RenterListingsPage extends StatefulWidget {
   const RenterListingsPage({super.key});
@@ -406,16 +407,75 @@ class _GroupsList extends StatelessWidget {
     if (groups.isEmpty) {
       return const Text('No groups found');
     }
+    final theme = Theme.of(context);
     return Column(
       children: groups.map((g) {
-        final spotsLeft = g['spotsLeft'] ?? (g['targetSize'] - g['currentSize']);
+        final currentSize = g['currentSize'] ?? 0;
+        final targetSize = g['targetSize'] ?? 0;
+        final ageRange = (g['ageRange'] ?? '').toString();
+        final cost = g['costPerPerson'];
+        final religion = (g['religionPreference'] ?? 'any').toString();
+        final spotsLeft = g['spotsLeft'] ?? (targetSize - currentSize);
         return Card(
-          child: ListTile(
-            title: Text('Size ${g['currentSize']}/${g['targetSize']} • ${g['ageRange']}'),
-            subtitle: Text('Per person: ${g['costPerPerson']} • Religion: ${g['religionPreference']} • Spots left: $spotsLeft'),
-            trailing: TextButton(
-              onPressed: () => onJoin(g['id'].toString()),
-              child: const Text('Join'),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 1,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.groups_2_outlined, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text('Group ${currentSize}/${targetSize}', style: theme.textTheme.titleMedium),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.event_seat, size: 16),
+                          const SizedBox(width: 4),
+                          Text('Spots: $spotsLeft'),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.cake_outlined, size: 16),
+                      label: Text(ageRange.isEmpty ? 'Age: —' : 'Age: $ageRange'),
+                    ),
+                    Chip(
+                      avatar: const Icon(Icons.attach_money, size: 16),
+                      label: Text(cost == null ? 'Per person: —' : 'Per person: $cost ETB'),
+                    ),
+                    Chip(
+                      avatar: const Icon(Icons.self_improvement_outlined, size: 16),
+                      label: Text('Religion: ${religion == 'any' ? 'Any' : religion}'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => onJoin(g['id'].toString()),
+                    icon: const Icon(Icons.group_add),
+                    label: const Text('Join this group'),
+                  ),
+                )
+              ],
             ),
           ),
         );

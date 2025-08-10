@@ -26,4 +26,6 @@ class ApiConstants {
   static const String myGroups = '/api/matching/my-groups';
   static const String groupsBase = '/api/matching/groups'; // + '/:groupId/(join|leave)'
   static const String notifications = '/api/matching/notifications';
+  static const String notificationsReadBase = '/api/matching/notifications'; // + '/:id/read'
+  static const String notificationsSend = '/api/matching/notifications/send';
 }

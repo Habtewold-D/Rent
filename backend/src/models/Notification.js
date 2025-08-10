@@ -16,7 +16,7 @@ const Notification = sequelize.define('Notification', {
     }
   },
   type: {
-    type: DataTypes.ENUM('group_found', 'group_complete', 'member_joined', 'member_left', 'group_expired'),
+    type: DataTypes.ENUM('group_found', 'group_complete', 'member_joined', 'member_left', 'group_expired', 'custom'),
     allowNull: false
   },
   title: {

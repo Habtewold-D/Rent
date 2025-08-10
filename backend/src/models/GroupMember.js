@@ -38,6 +38,15 @@ const GroupMember = sequelize.define('GroupMember', {
   isReplacementMember: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  paymentStatus: {
+    type: DataTypes.ENUM('pending', 'paid', 'expired', 'none'),
+    allowNull: false,
+    defaultValue: 'none'
+  },
+  paymentDueAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'group_members',
