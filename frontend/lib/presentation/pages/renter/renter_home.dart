@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
-import 'renter_home_page.dart';
 import 'renter_listings_page.dart';
 import 'renter_match_page.dart';
 import 'renter_bookings_page.dart';
 import 'renter_profile_page.dart';
+import '../notifications/notifications_page.dart';
 import '../auth/login_page.dart';
 import '../../widgets/notification_bell.dart';
 
@@ -20,19 +20,17 @@ class _RenterHomeState extends State<RenterHome> {
   int _index = 0;
 
   final _pages = const [
-    RenterHomePage(), // 0
-    RenterListingsPage(), // 1
-    RenterProfilePage(), // 2 (in bottom bar)
-    RenterMatchPage(), // 3 (drawer)
-    RenterBookingsPage(), // 4 (drawer)
+    RenterListingsPage(), // 0 - Listings is home
+    RenterBookingsPage(), // 1 - Bookings tab
+    RenterProfilePage(),  // 2 - Profile tab
+    RenterMatchPage(),    // 3 - drawer only
   ];
 
   final _titles = const [
-    'Home',
     'Listings',
+    'Bookings',
     'Profile',
     'Match',
-    'Bookings',
   ];
 
   @override
@@ -80,13 +78,16 @@ class _RenterHomeState extends State<RenterHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.book_online_outlined),
-              title: const Text('Bookings'),
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Notifications'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _index = 4);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
               },
             ),
+            // Bookings is now a bottom tab
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout),
@@ -105,12 +106,12 @@ class _RenterHomeState extends State<RenterHome> {
       ),
       body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index > 2 ? 0 : _index, // map drawer-only pages to first tab index for highlight
+        currentIndex: _index > 2 ? 0 : _index, // drawer-only pages map to first tab for highlight
         type: BottomNavigationBarType.fixed,
         onTap: (i) => setState(() => _index = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.apartment_outlined), label: 'Listings'),
+          BottomNavigationBarItem(icon: Icon(Icons.book_online_outlined), label: 'Bookings'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),

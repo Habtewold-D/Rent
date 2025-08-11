@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
-import 'landlord_dashboard_page.dart';
 import 'landlord_listings_page.dart';
 import 'landlord_new_listing_page.dart';
 import 'landlord_bookings_page.dart';
 import 'landlord_profile_page.dart';
 import 'landlord_verification_page.dart';
+import '../notifications/notifications_page.dart';
 import '../auth/login_page.dart';
 import '../../widgets/notification_bell.dart';
 
@@ -21,20 +21,18 @@ class _LandlordHomeState extends State<LandlordHome> {
   int _index = 0;
 
   final _pages = const [
-    LandlordDashboardPage(), // 0
-    LandlordListingsPage(),  // 1
-    LandlordProfilePage(),   // 2 bottom
-    LandlordNewListingPage(), // 3 drawer
-    LandlordBookingsPage(),   // 4 drawer
-    LandlordVerificationPage(), // 5 drawer
+    LandlordListingsPage(),  // 0 - Listings is home
+    LandlordBookingsPage(),  // 1 - Bookings tab
+    LandlordProfilePage(),   // 2 - Profile tab
+    LandlordNewListingPage(), // 3 - drawer only
+    LandlordVerificationPage(), // 4 - drawer only
   ];
 
   final _titles = const [
-    'Dashboard',
     'Listings',
+    'Bookings',
     'Profile',
     'New Listing',
-    'Bookings',
     'Verification',
   ];
 
@@ -83,11 +81,13 @@ class _LandlordHomeState extends State<LandlordHome> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.book_online_outlined),
-              title: const Text('Bookings'),
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Notifications'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _index = 4);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                );
               },
             ),
             ListTile(
@@ -95,7 +95,7 @@ class _LandlordHomeState extends State<LandlordHome> {
               title: const Text('Verification'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _index = 5);
+                setState(() => _index = 4);
               },
             ),
             const Divider(),
@@ -120,8 +120,8 @@ class _LandlordHomeState extends State<LandlordHome> {
         type: BottomNavigationBarType.fixed,
         onTap: (i) => setState(() => _index = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), label: 'Listings'),
+          BottomNavigationBarItem(icon: Icon(Icons.book_online_outlined), label: 'Bookings'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),
