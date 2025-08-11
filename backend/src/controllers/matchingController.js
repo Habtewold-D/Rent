@@ -8,6 +8,43 @@ const sequelize = require('../config/database');
 
 const matchingController = {};
 
+// Helper: expire overdue unpaid members for a specific room, reopen groups
+const expireOverdueForRoom = async (roomId) => {
+  // Find groups in this room
+  const groups = await MatchGroup.findAll({ where: { roomId } });
+  if (!groups || groups.length === 0) return { updatedGroups: 0, removed: 0 };
+  const groupIds = groups.map(g => g.id);
+  const now = new Date();
+  const overdueMembers = await GroupMember.findAll({
+    where: {
+      groupId: { [Op.in]: groupIds },
+      status: 'active',
+      paymentStatus: 'pending'
+    }
+  });
+  const overdue = overdueMembers.filter(m => m.paymentDueAt && new Date(m.paymentDueAt) < now);
+  if (overdue.length === 0) return { updatedGroups: 0, removed: 0 };
+  const ids = overdue.map(m => m.id);
+  await GroupMember.update(
+    { status: 'left', paymentStatus: 'expired' },
+    { where: { id: ids } }
+  );
+  let updatedGroups = 0;
+  for (const gid of groupIds) {
+    const group = groups.find(g => g.id === gid);
+    if (!group) continue;
+    const activeCount = await GroupMember.count({ where: { groupId: gid, status: 'active' } });
+    const updates = { currentSize: activeCount };
+    if (activeCount < group.targetSize) {
+      updates.status = 'forming';
+      updates.isActive = true;
+    }
+    await group.update(updates);
+    updatedGroups++;
+  }
+  return { updatedGroups, removed: ids.length };
+};
+
 // Join room - get filtered groups and create if needed
 matchingController.joinRoom = async (req, res) => {
   try {
@@ -57,6 +94,9 @@ matchingController.joinRoom = async (req, res) => {
     // Calculate age range
     const ageRangeMin = finalAge - 5;
     const ageRangeMax = finalAge + 5;
+
+    // Before searching, expire overdue unpaid members for this room so freed spots appear immediately
+    await expireOverdueForRoom(roomId);
 
     // Get all active groups for this room
     const allGroups = await MatchGroup.findAll({
@@ -207,6 +247,8 @@ matchingController.joinRoom = async (req, res) => {
     });
   }
 };
+
+ 
 
 // Create new group
 matchingController.createGroup = async (req, res) => {
@@ -378,7 +420,7 @@ matchingController.joinGroup = async (req, res) => {
       targetSize: group.targetSize
     });
 
-    // If group is now complete, send completion notifications with payment info
+    // If group is now complete, start 1-hour payment window for all members and notify
     if (newSize >= group.targetSize) {
       await notifyGroupMembers(groupId, 'group_complete', {
         costPerPerson: group.costPerPerson,
@@ -416,10 +458,48 @@ matchingController.getMyGroups = async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Auto-clean overdue unpaid members globally before responding
+    try {
+      const now = new Date();
+      const overdue = await GroupMember.findAll({
+        where: {
+          status: 'active',
+          paymentStatus: 'pending',
+          paymentDueAt: { [Op.lt]: now }
+        }
+      });
+      if (overdue.length) {
+        // Group by groupId
+        const byGroup = overdue.reduce((acc, m) => {
+          acc[m.groupId] = acc[m.groupId] || [];
+          acc[m.groupId].push(m);
+          return acc;
+        }, {});
+        for (const [gid, members] of Object.entries(byGroup)) {
+          const memberIds = members.map(m => m.id);
+          await GroupMember.update(
+            { status: 'left', paymentStatus: 'expired' },
+            { where: { id: memberIds } }
+          );
+          const group = await MatchGroup.findByPk(gid);
+          if (group) {
+            const activeCount = await GroupMember.count({ where: { groupId: gid, status: 'active' } });
+            const updates = { currentSize: activeCount };
+            if (String(group.status).toLowerCase() === 'complete' && activeCount < group.targetSize) {
+              updates.status = 'forming';
+            }
+            await group.update(updates);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('getMyGroups cleanup warn:', e.message);
+    }
+
     const userGroups = await GroupMember.findAll({
       where: {
         userId,
-        status: 'active'
+        status: { [Op.in]: ['active', 'left'] }
       },
       include: [
         {
@@ -429,7 +509,7 @@ matchingController.getMyGroups = async (req, res) => {
             {
               model: Room,
               as: 'room',
-              attributes: ['id', 'address', 'city', 'monthlyRent']
+              attributes: ['id', 'address', 'city', 'monthlyRent', 'genderPreference', 'images']
             },
             {
               model: GroupMember,
@@ -451,6 +531,12 @@ matchingController.getMyGroups = async (req, res) => {
       .map(membership => {
         const group = membership.matchGroup; // correct alias per models/index.js
         if (!group) return null;
+        // Only include 'left' memberships when they expired for payment
+        if (membership.status === 'left' && String(membership.paymentStatus || '').toLowerCase() !== 'expired') {
+          return null;
+        }
+        const paymentRequired = (String(membership.paymentStatus || '').toLowerCase() === 'pending') || (String(group.status || '').toLowerCase() === 'complete');
+        const isHistory = String(membership.paymentStatus || '').toLowerCase() === 'expired' || (membership.status === 'left' && !!membership.paymentDueAt);
         return {
           groupId: group.id,
           room: group.room || null,
@@ -458,6 +544,8 @@ matchingController.getMyGroups = async (req, res) => {
           targetSize: group.targetSize,
           costPerPerson: group.costPerPerson,
           status: group.status,
+          paymentRequired,
+          isHistory,
           isCreator: membership.isCreator,
           religionPreference: group.religionPreference,
           ageRange: `${group.ageRangeMin}-${group.ageRangeMax}`,
@@ -467,7 +555,10 @@ matchingController.getMyGroups = async (req, res) => {
             religion: member.user?.religion,
             isCreator: member.isCreator
           })),
-          spotsLeft: group.targetSize - group.currentSize
+          spotsLeft: group.targetSize - group.currentSize,
+          paymentDueAt: membership.paymentDueAt,
+          paymentStatus: membership.paymentStatus,
+          expiredAt: (String(membership.paymentStatus || '').toLowerCase() === 'expired' && membership.paymentDueAt) ? membership.paymentDueAt : null
         };
       })
       .filter(Boolean);
@@ -526,17 +617,31 @@ matchingController.leaveGroup = async (req, res) => {
     // Update membership status
     await membership.update({ status: 'left' });
 
-    // Update group size
+    // Update group size and reopen if not full anymore
+    const prevStatus = group.status;
     const newSize = group.currentSize - 1;
-    await group.update({ 
-      currentSize: newSize,
-      status: newSize === 0 ? 'expired' : 'forming'
-    });
-
-    // If group becomes empty, deactivate it
-    if (newSize === 0) {
-      await group.update({ isActive: false });
+    const updates = { currentSize: newSize };
+    if (newSize <= 0) {
+      // If empty, expire and deactivate
+      updates.status = 'expired';
+      updates.isActive = false;
     } else {
+      // Make it public/searchable again
+      updates.status = 'forming';
+      updates.isActive = true;
+    }
+    await group.update(updates);
+
+    // If group was previously complete/full and is now forming, cancel pending payment for remaining members
+    if ((prevStatus === 'complete' || prevStatus === 'completed' || prevStatus === 'full') && newSize < group.targetSize) {
+      await GroupMember.update(
+        { paymentStatus: 'none', paymentDueAt: null },
+        { where: { groupId: group.id, status: 'active' } }
+      );
+    }
+
+    // If members remain, notify them
+    if (newSize > 0) {
       // Notify remaining members
       await notifyGroupMembers(groupId, 'member_left', {
         leftMemberName: req.user.firstName,
@@ -573,7 +678,6 @@ const notifyCompatibleUsers = async (groupId, roomId) => {
       ]
     });
 
-    // Find compatible users
     const compatibleUsers = await User.findAll({
       where: {
         age: {
@@ -677,7 +781,11 @@ const notifyGroupMembers = async (groupId, type, data) => {
         {
           const costPerPerson = group && group.costPerPerson ? group.costPerPerson : undefined;
           const roomId = group && group.roomId ? group.roomId : undefined;
+          // Compute expiry based on server local time
           const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+          // Build a local-time ISO string (no trailing 'Z') so clients parse as local
+          const tzOffsetMs = expiresAt.getTimezoneOffset() * 60000;
+          const localIso = new Date(expiresAt.getTime() - tzOffsetMs).toISOString().replace(/Z$/, '');
           const payData = {
             screen: 'bookings',
             params: {
@@ -685,7 +793,8 @@ const notifyGroupMembers = async (groupId, type, data) => {
               payLabel: 'Pay now',
               payUrl: `/payments/rooms/${roomId || ''}/groups/${groupId}`,
               costPerPerson: costPerPerson,
-              expiresAt: expiresAt.toISOString(),
+              // Use local ISO so frontend treats as local time for countdown
+              expiresAt: localIso,
               groupId: groupId,
               roomId: roomId,
             },
@@ -703,10 +812,10 @@ const notifyGroupMembers = async (groupId, type, data) => {
             }));
             await Notification.bulkCreate(items);
 
-            // Set payment window for recipients
+            // Set payment window for ALL active members (including creator)
             await GroupMember.update(
               { paymentStatus: 'pending', paymentDueAt: expiresAt },
-              { where: { groupId, userId: recipients, status: 'active' } }
+              { where: { groupId, status: 'active' } }
             );
           }
         }
@@ -905,6 +1014,53 @@ matchingController.notifyUsers = async (req, res) => {
   } catch (error) {
     console.error('Error sending user notifications:', error);
     res.status(500).json({ success: false, message: 'Failed to send notifications', error: error.message });
+  }
+};
+
+// Leave group
+matchingController.leaveGroup = async (req, res) => {
+  try {
+    const groupId = req.params.groupId;
+    const userId = req.user.id;
+
+    const member = await GroupMember.findOne({ where: { groupId, userId, status: 'active' } });
+    if (!member) {
+      return res.status(404).json({ success: false, message: 'You are not a member of this group' });
+    }
+
+    const user = await User.findByPk(userId);
+
+    // Mark member as left and clear their payment fields
+    await member.update({ status: 'left', paymentMethod: null, paymentStatus: 'none', paymentDueAt: null });
+
+    // Recompute group size and reopen if not full
+    const group = await MatchGroup.findByPk(groupId);
+    const activeCount = await GroupMember.count({ where: { groupId, status: 'active' } });
+    const updates = { currentSize: activeCount };
+    if (activeCount < group.targetSize) {
+      updates.status = 'forming';
+      updates.isActive = true; // make searchable again
+      // Clear payment windows for remaining active members since group is no longer full
+      await GroupMember.update(
+        { paymentStatus: 'none', paymentDueAt: null },
+        { where: { groupId, status: 'active' } }
+      );
+    }
+    await group.update(updates);
+
+    // Notify remaining active members using existing helper
+    try {
+      await notifyGroupMembers(groupId, 'member_left', {
+        leftMemberName: user && user.firstName ? user.firstName : 'A member',
+        currentSize: activeCount,
+        targetSize: group.targetSize,
+      });
+    } catch (_) { /* best-effort notification */ }
+
+    res.json({ success: true, message: 'You have left the group' });
+  } catch (error) {
+    console.error('Error leaving group:', error);
+    res.status(500).json({ success: false, message: 'Failed to leave group', error: error.message });
   }
 };
 
