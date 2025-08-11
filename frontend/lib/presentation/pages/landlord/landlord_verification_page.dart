@@ -94,9 +94,6 @@ class _LandlordVerificationPageState extends State<LandlordVerificationPage> {
       color: t.colorScheme.onBackground.withOpacity(0.8),
     );
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Landlord Verification'),
-      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),

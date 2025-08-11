@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
 import 'landlord_listings_page.dart';
@@ -44,33 +45,63 @@ class _LandlordHomeState extends State<LandlordHome> {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.teal,
         title: Text(_titles[_index]),
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.teal,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
         actions: const [NotificationBell()],
       ),
-      drawer: Drawer(
+      drawer: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.teal,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+        child: Drawer(
         child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            DrawerHeader(
-              margin: EdgeInsets.zero,
-              decoration: const BoxDecoration(color: Colors.teal),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const CircleAvatar(radius: 36, child: Icon(Icons.person, size: 36)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 4),
-                        Text(email, style: const TextStyle(color: Colors.white70), overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  )
-                ],
-              ),
+            Builder(
+              builder: (context) {
+                final top = MediaQuery.of(context).padding.top;
+                return Container(
+                  color: Colors.teal,
+                  padding: EdgeInsets.only(top: top + 20, left: 20, right: 20, bottom: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CircleAvatar(radius: 44, child: Icon(Icons.person, size: 44, color: Colors.white)),
+                      const SizedBox(height: 12),
+                      Text(
+                        name,
+                        textAlign: TextAlign.start,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        email,
+                        textAlign: TextAlign.start,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.add_box_outlined),
@@ -112,6 +143,7 @@ class _LandlordHomeState extends State<LandlordHome> {
               },
             ),
           ],
+        ),
         ),
       ),
       body: IndexedStack(index: _index, children: _pages),
