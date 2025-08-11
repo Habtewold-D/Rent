@@ -9,6 +9,7 @@ const landlordRoutes = require('./routes/landlord');
 const adminRoutes = require('./routes/admin');
 const roomRoutes = require('./routes/rooms');
 const matchingRoutes = require('./routes/matching');
+const paymentsRoutes = require('./routes/payments');
 const createAdminUser = require('./utils/createAdmin');
 
 // Import models to establish associations
@@ -31,6 +32,27 @@ app.use('/api/landlord', landlordRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/matching', matchingRoutes);
+app.use('/api/payments', paymentsRoutes);
+
+// Public return page for Chapa (non-API path)
+app.get('/payments/chapa/return', (req, res) => {
+  const tx = req.query.tx_ref || '';
+  res.set('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Completed</title>
+    <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5} .ok{color:#0a7}</style>
+  </head>
+  <body>
+    <h2 class="ok">Payment Completed</h2>
+    <p>Transaction: ${tx}</p>
+    <p>You can now return to the app.</p>
+  </body>
+  </html>`);
+});
 
 // Health check route
 app.get('/api/health', (req, res) => {

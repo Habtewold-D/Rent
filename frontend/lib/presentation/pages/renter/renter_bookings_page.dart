@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../../core/constants/api_constants.dart' as api;
 import '../../../data/services/matching_service.dart';
+import '../../../data/services/payments_service.dart';
+import '../../pages/payments/payment_webview_page.dart';
 
 class RenterBookingsPage extends StatefulWidget {
   final String? payUrl;
@@ -662,6 +664,8 @@ class _PayRequiredCard extends StatefulWidget {
 class _PayRequiredCardState extends State<_PayRequiredCard> {
   Duration? _left;
   DateTime? _exp;
+  bool _paid = false;
+  bool _starting = false;
 
   @override
   void initState() {
@@ -778,26 +782,64 @@ class _PayRequiredCardState extends State<_PayRequiredCard> {
                   label: const Text('Leave Group'),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () {
+                if (_paid) ...[
+                  const Chip(label: Text('Paid')),
+                ] else
+                  FilledButton(
+                  onPressed: _starting ? null : () async {
+                    setState(() => _starting = true);
                     final url = widget.payUrl.trim();
-                    if (url.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Payment link not available yet.')),
-                      );
-                      return;
-                    }
                     final now = DateTime.now();
                     final expired = _exp != null && _exp!.isBefore(now);
-                    if (expired) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Payment window may have expired, attempting to open anyway...')),
+                    // If expired, we'll still proceed by creating a fresh checkout without showing a snackbar
+                    try {
+                      final auth = context.read<AuthViewModel>();
+                      final token = auth.token;
+                      if (token == null || token.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login required to pay')));
+                        setState(() => _starting = false);
+                        return;
+                      }
+                      // If expired, force a new checkout session
+                      // Otherwise, if url looks like backend checkout route, request checkout_url; else assume it's already a Chapa URL
+                      String checkoutUrl;
+                      if (expired || url.isEmpty) {
+                        // No link provided; attempt to create a fresh checkout session via backend
+                        checkoutUrl = await PaymentsService().createChapaCheckout(
+                          token,
+                          groupId: widget.groupId,
+                        );
+                      } else if (url.startsWith('/') || !url.startsWith('http')) {
+                        checkoutUrl = await PaymentsService().createChapaCheckout(
+                          token,
+                          groupId: widget.groupId,
+                        );
+                      } else {
+                        checkoutUrl = url;
+                      }
+                      final ok = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => PaymentWebViewPage(
+                            checkoutUrl: checkoutUrl,
+                            successUrlPrefix: '/payments/chapa/return',
+                            // Optionally set success/cancel URL prefixes if you host a return page
+                          ),
+                        ),
                       );
+                      if (ok == true) {
+                        // Mark paid on backend (webhook may arrive later; this is a defensive update)
+                        try {
+                          await PaymentsService().markPaid(token, groupId: widget.groupId);
+                        } catch (_) {}
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment completed')));
+                        if (mounted) setState(() => _paid = true);
+                      }
+                    } catch (e) {
+                      // Silently ignore transient errors if WebView already opened successfully
+                      // You can add logging here if needed
+                    } finally {
+                      if (mounted) setState(() => _starting = false);
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Proceeding to payment: $url')),
-                    );
-                    // TODO: navigate to payment screen using `url`
                   },
                   child: Text(widget.payLabel.isNotEmpty ? widget.payLabel : 'Pay now'),
                 ),
