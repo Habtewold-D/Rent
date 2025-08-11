@@ -28,19 +28,53 @@ paymentsController.createChapaCheckout = async (req, res) => {
     }
     if (!group) return res.status(404).json({ success: false, message: 'Group not found' });
 
-    const member = await GroupMember.findOne({ where: { groupId, userId, status: 'active' } });
-    if (!member) return res.status(403).json({ success: false, message: 'You are not a member of this group' });
+    let member = await GroupMember.findOne({ where: { groupId, userId, status: 'active' } });
+    if (!member) {
+      // Allow the group creator/owner to proceed; upsert an active membership for them
+      const isOwner = (
+        (group.userId && String(group.userId) === String(userId)) ||
+        (group.createdBy && String(group.createdBy) === String(userId)) ||
+        (group.ownerId && String(group.ownerId) === String(userId))
+      );
+      if (isOwner) {
+        const existingAny = await GroupMember.findOne({ where: { groupId, userId } });
+        if (existingAny) {
+          await existingAny.update({ status: 'active', role: existingAny.role || 'owner' });
+          member = existingAny;
+        } else {
+          member = await GroupMember.create({ groupId, userId, status: 'active', role: 'owner' });
+        }
+      } else {
+        return res.status(403).json({ success: false, message: 'You are not a member of this group' });
+      }
+    }
 
     const user = await User.findByPk(userId);
     const amount = group.costPerPerson;
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Invalid amount' });
 
-    const firstName = user.firstName || 'User';
-    const lastName = user.lastName || '';
-    const email = user.email || `user${userId}@example.com`;
+    const rawFirst = (user.firstName || 'User').toString();
+    const rawLast = (user.lastName || '').toString();
+    const sanitizeName = (s) => s.replace(/[^a-zA-Z\s'-]/g, '').trim().slice(0, 30) || 'User';
+    const firstName = sanitizeName(rawFirst);
+    const lastName = sanitizeName(rawLast);
+    // Sanitize email for Chapa
+    const toShort = (v) => `${v}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+    const isValidEmail = (e) => /^(?=.{3,128}$)[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '');
+    let email = (user.email || '').toString().trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      email = 'payer@rent.com';
+    } else {
+      // Enforce a common domain if the TLD is suspicious (e.g., too short/uncommon)
+      const domain = email.split('@')[1] || '';
+      const tld = (domain.split('.').pop() || '').toLowerCase();
+      const allowedDomains = new Set(['gmail.com','yahoo.com','outlook.com','hotmail.com','icloud.com','proton.me','rent.com']);
+      if (!allowedDomains.has(domain) || tld.length < 3) {
+        email = 'payer@rent.com';
+      }
+    }
 
     // Build a short, Chapa-compliant tx_ref (alphanumeric and '-')
-    const toShort = (v) => `${v}`.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
     const txRef = `grp${toShort(groupId)}-usr${toShort(userId)}-${Date.now()}`.slice(0, 64);
     console.log('[payments] tx_ref =>', txRef);
 
@@ -56,6 +90,16 @@ paymentsController.createChapaCheckout = async (req, res) => {
       // Server-side notification
       callback_url: `${BASE_URL}/api/payments/chapa/webhook`
     };
+    console.log('[payments] initialize payload', {
+      amount: body.amount,
+      currency: body.currency,
+      email: body.email,
+      first_name: body.first_name,
+      last_name: body.last_name,
+      tx_ref: body.tx_ref,
+      return_url: body.return_url,
+      callback_url: body.callback_url,
+    });
 
     const resp = await fetch('https://api.chapa.co/v1/transaction/initialize', {
       method: 'POST',
@@ -68,7 +112,8 @@ paymentsController.createChapaCheckout = async (req, res) => {
 
     const data = await resp.json();
     if (!resp.ok || !data || !data.status || data.status !== 'success') {
-      console.warn('[payments] Initialize failed', { status: resp.status, data });
+      const detail = data && data.message ? data.message : undefined;
+      console.warn('[payments] Initialize failed', { status: resp.status, data, detail });
       return res.status(502).json({ success: false, message: 'Failed to initialize payment', status: resp.status, error: data });
     }
 
