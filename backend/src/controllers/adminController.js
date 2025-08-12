@@ -1,6 +1,10 @@
 const User = require('../models/User');
 const LandlordRequest = require('../models/LandlordRequest');
-const { Op } = require('sequelize');
+const Room = require('../models/Room');
+const MatchGroup = require('../models/MatchGroup');
+const GroupMember = require('../models/GroupMember');
+const Notification = require('../models/Notification');
+const { Op, fn, col, where, literal } = require('sequelize');
 const sequelize = require('../config/database');
 
 /**
@@ -269,4 +273,88 @@ module.exports = {
   reviewLandlordRequest,
   getLandlordRequestStats,
   getUsers,
+  getAdminSummary,
 };
+
+/**
+ * Get admin dashboard summary
+ */
+async function getAdminSummary(req, res) {
+  try {
+    // Time windows
+    const now = new Date();
+    const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+    const d7 = daysAgo(7);
+    const d30 = daysAgo(30);
+
+    // Users
+    const [totalUsers, renters, landlords, new7dUsers, new30dUsers] = await Promise.all([
+      User.count(),
+      User.count({ where: { role: 'renter' } }),
+      User.count({ where: { role: 'landlord' } }),
+      User.count({ where: { createdAt: { [Op.gte]: d7 } } }),
+      User.count({ where: { createdAt: { [Op.gte]: d30 } } }),
+    ]);
+
+    // Landlord request stats (reuse aggregation)
+    const lrRaw = await LandlordRequest.findAll({
+      attributes: ['status', [fn('COUNT', col('status')), 'count']],
+      group: ['status'],
+    });
+    const landlordRequests = { pending: 0, approved: 0, rejected: 0, total: 0 };
+    lrRaw.forEach((r) => {
+      const c = parseInt(r.dataValues.count);
+      landlordRequests[r.status] = c;
+      landlordRequests.total += c;
+    });
+
+    // Rooms
+    const [totalRooms, availableRooms, new30dRooms] = await Promise.all([
+      Room.count(),
+      Room.count({ where: { isAvailable: true, isApproved: true } }),
+      Room.count({ where: { createdAt: { [Op.gte]: d30 } } }),
+    ]);
+    const unavailableRooms = Math.max(0, totalRooms - availableRooms);
+
+    // Match groups & members
+    const [groups, members] = await Promise.all([
+      MatchGroup.count(),
+      GroupMember.count(),
+    ]);
+
+    // Notifications total
+    const notificationsTotal = await Notification.count();
+
+    // Compose
+    res.json({
+      success: true,
+      data: {
+        users: {
+          total: totalUsers,
+          renters,
+          landlords,
+          new7d: new7dUsers,
+          new30d: new30dUsers,
+        },
+        landlordRequests,
+        rooms: {
+          total: totalRooms,
+          available: availableRooms,
+          unavailable: unavailableRooms,
+          new30d: new30dRooms,
+        },
+        match: {
+          groups,
+          members,
+        },
+        notifications: { total: notificationsTotal },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get admin summary',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+}
