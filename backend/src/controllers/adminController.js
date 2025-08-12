@@ -75,6 +75,59 @@ const getLandlordRequests = async (req, res) => {
 };
 
 /**
+ * Get users (admin)
+ */
+const getUsers = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, role } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (role && typeof role === 'string') {
+      where.role = role.toLowerCase();
+    } else {
+      // By default, do not include admin accounts in the users list
+      where.role = { [Op.ne]: 'admin' };
+    }
+    if (search && typeof search === 'string' && search.trim()) {
+      const s = `%${search.trim()}%`;
+      where[Op.or] = [
+        { email: { [Op.iLike]: s } },
+        { firstName: { [Op.iLike]: s } },
+        { lastName: { [Op.iLike]: s } },
+      ];
+    }
+
+    const { count, rows } = await User.findAndCountAll({
+      where,
+      attributes: ['id', 'email', 'firstName', 'lastName', 'role', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        users: rows,
+        pagination: {
+          currentPage: parseInt(page),
+          itemsPerPage: parseInt(limit),
+          totalItems: count,
+          totalPages: Math.ceil(count / parseInt(limit)),
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Review landlord request (approve/reject)
  */
 const reviewLandlordRequest = async (req, res) => {
@@ -214,5 +267,6 @@ const getLandlordRequestStats = async (req, res) => {
 module.exports = {
   getLandlordRequests,
   reviewLandlordRequest,
-  getLandlordRequestStats
+  getLandlordRequestStats,
+  getUsers,
 };

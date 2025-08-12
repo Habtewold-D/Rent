@@ -19,6 +19,7 @@ class ApiConstants {
   static const String adminLandlordRequests = '/api/admin/landlord-requests';
   static const String adminReviewLandlordRequest = '/api/admin/landlord-requests'; // + '/:id/review'
   static const String adminLandlordRequestStats = '/api/admin/landlord-requests/stats';
+  static const String adminUsers = '/api/admin/users';
 
   // Matching endpoints (future use)
   static const String joinRoom = '/api/matching/join-room'; // + '/:roomId'
